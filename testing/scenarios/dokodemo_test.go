@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
 	"v2ray.com/core"
 	"v2ray.com/core/app/log"
 	"v2ray.com/core/app/proxyman"

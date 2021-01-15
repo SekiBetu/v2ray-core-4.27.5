@@ -30,7 +30,7 @@ var (
 
 	tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"none": func() interface{} { return new(NoOpConnectionAuthenticator) },
-		"http": func() interface{} { return new(Authenticator) },
+		"http": func() interface{} { return new(HTTPAuthenticator) },
 	}, "type", "")
 )
 
@@ -168,7 +168,6 @@ type HTTPConfig struct {
 	Path string      `json:"path"`
 }
 
-// Build implements Buildable.
 func (c *HTTPConfig) Build() (proto.Message, error) {
 	config := &http.Config{
 		Path: c.Path,
@@ -185,7 +184,6 @@ type QUICConfig struct {
 	Key      string          `json:"key"`
 }
 
-// Build implements Buildable.
 func (c *QUICConfig) Build() (proto.Message, error) {
 	config := &quic.Config{
 		Key: c.Key,
@@ -221,18 +219,27 @@ func (c *QUICConfig) Build() (proto.Message, error) {
 }
 
 type DomainSocketConfig struct {
-	Path     string `json:"path"`
-	Abstract bool   `json:"abstract"`
-	Padding  bool   `json:"padding"`
+	Path                string `json:"path"`
+	Abstract            bool   `json:"abstract"`
+	Padding             bool   `json:"padding"`
+	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
 }
 
-// Build implements Buildable.
 func (c *DomainSocketConfig) Build() (proto.Message, error) {
 	return &domainsocket.Config{
-		Path:     c.Path,
-		Abstract: c.Abstract,
-		Padding:  c.Padding,
+		Path:                c.Path,
+		Abstract:            c.Abstract,
+		Padding:             c.Padding,
+		AcceptProxyProtocol: c.AcceptProxyProtocol,
 	}, nil
+}
+
+type TLSCertConfig struct {
+	CertFile string   `json:"certificateFile"`
+	CertStr  []string `json:"certificate"`
+	KeyFile  string   `json:"keyFile"`
+	KeyStr   []string `json:"key"`
+	Usage    string   `json:"usage"`
 }
 
 func readFileOrString(f string, s []string) ([]byte, error) {
@@ -245,15 +252,6 @@ func readFileOrString(f string, s []string) ([]byte, error) {
 	return nil, newError("both file and bytes are empty.")
 }
 
-type TLSCertConfig struct {
-	CertFile string   `json:"certificateFile"`
-	CertStr  []string `json:"certificate"`
-	KeyFile  string   `json:"keyFile"`
-	KeyStr   []string `json:"key"`
-	Usage    string   `json:"usage"`
-}
-
-// Build implements Buildable.
 func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	certificate := new(tls.Certificate)
 
@@ -286,12 +284,13 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type TLSConfig struct {
-	Insecure                bool             `json:"allowInsecure"`
-	Certs                   []*TLSCertConfig `json:"certificates"`
-	ServerName              string           `json:"serverName"`
-	ALPN                    *StringList      `json:"alpn"`
-	EnableSessionResumption bool             `json:"enableSessionResumption"`
-	DisableSystemRoot       bool             `json:"disableSystemRoot"`
+	Insecure                 bool             `json:"allowInsecure"`
+	InsecureCiphers          bool             `json:"allowInsecureCiphers"`
+	Certs                    []*TLSCertConfig `json:"certificates"`
+	ServerName               string           `json:"serverName"`
+	ALPN                     *StringList      `json:"alpn"`
+	DisableSessionResumption bool             `json:"disableSessionResumption"`
+	DisableSystemRoot        bool             `json:"disableSystemRoot"`
 }
 
 // Build implements Buildable.
@@ -307,13 +306,14 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	serverName := c.ServerName
 	config.AllowInsecure = c.Insecure
+	config.AllowInsecureCiphers = c.InsecureCiphers
 	if len(c.ServerName) > 0 {
 		config.ServerName = serverName
 	}
 	if c.ALPN != nil && len(*c.ALPN) > 0 {
 		config.NextProtocol = []string(*c.ALPN)
 	}
-	config.EnableSessionResumption = c.EnableSessionResumption
+	config.DisableSessionResumption = c.DisableSessionResumption
 	config.DisableSystemRoot = c.DisableSystemRoot
 	return config, nil
 }
@@ -341,13 +341,11 @@ func (p TransportProtocol) Build() (string, error) {
 }
 
 type SocketConfig struct {
-	Mark                int32  `json:"mark"`
-	TFO                 *bool  `json:"tcpFastOpen"`
-	TProxy              string `json:"tproxy"`
-	AcceptProxyProtocol bool   `json:"acceptProxyProtocol"`
+	Mark   int32  `json:"mark"`
+	TFO    *bool  `json:"tcpFastOpen"`
+	TProxy string `json:"tproxy"`
 }
 
-// Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	var tfoSettings internet.SocketConfig_TCPFastOpenState
 	if c.TFO != nil {
@@ -368,10 +366,9 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 	}
 
 	return &internet.SocketConfig{
-		Mark:                c.Mark,
-		Tfo:                 tfoSettings,
-		Tproxy:              tproxy,
-		AcceptProxyProtocol: c.AcceptProxyProtocol,
+		Mark:   c.Mark,
+		Tfo:    tfoSettings,
+		Tproxy: tproxy,
 	}, nil
 }
 
@@ -394,7 +391,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		ProtocolName: "tcp",
 	}
 	if c.Network != nil {
-		protocol, err := c.Network.Build()
+		protocol, err := (*c.Network).Build()
 		if err != nil {
 			return nil, err
 		}
@@ -466,7 +463,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.QUICSettings != nil {
 		qs, err := c.QUICSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build QUIC config").Base(err)
+			return nil, newError("failed to build QUIC config").Base(err)
 		}
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "quic",
@@ -476,7 +473,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	if c.SocketSettings != nil {
 		ss, err := c.SocketSettings.Build()
 		if err != nil {
-			return nil, newError("Failed to build sockopt").Base(err)
+			return nil, newError("failed to build sockopt").Base(err)
 		}
 		config.SocketSettings = ss
 	}

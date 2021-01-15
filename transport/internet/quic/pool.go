@@ -19,5 +19,5 @@ func getBuffer() []byte {
 }
 
 func putBuffer(p []byte) {
-	pool.Put(p) // nolint: staticcheck
+	pool.Put(p)
 }

@@ -1,6 +1,6 @@
 package http
 
-//go:generate go run v2ray.com/core/common/errors/errorgen
+//go:generate errorgen
 
 import (
 	"bufio"
@@ -109,23 +109,24 @@ func (h *HeaderReader) Read(reader io.Reader) (*buf.Buffer, error) {
 		return buffer, nil
 	}
 
-	// Parse the request
+	//Parse the request
+
 	if req, err := readRequest(bufio.NewReader(bytes.NewReader(headerBuf.Bytes())), false); err != nil {
 		return nil, err
-	} else { // nolint: golint
+	} else {
 		h.req = req
 	}
 
-	// Check req
+	//Check req
 	path := h.req.URL.Path
-	hasThisURI := false
+	hasThisUri := false
 	for _, u := range h.expectedHeader.Uri {
 		if u == path {
-			hasThisURI = true
+			hasThisUri = true
 		}
 	}
 
-	if !hasThisURI {
+	if !hasThisUri {
 		return nil, ErrHeaderMisMatch
 	}
 
@@ -157,7 +158,7 @@ func (w *HeaderWriter) Write(writer io.Writer) error {
 	return err
 }
 
-type Conn struct {
+type HttpConn struct {
 	net.Conn
 
 	readBuffer          *buf.Buffer
@@ -166,11 +167,12 @@ type Conn struct {
 	errorWriter         Writer
 	errorMismatchWriter Writer
 	errorTooLongWriter  Writer
-	errReason           error
+
+	errReason error
 }
 
-func NewConn(conn net.Conn, reader Reader, writer Writer, errorWriter Writer, errorMismatchWriter Writer, errorTooLongWriter Writer) *Conn {
-	return &Conn{
+func NewHttpConn(conn net.Conn, reader Reader, writer Writer, errorWriter Writer, errorMismatchWriter Writer, errorTooLongWriter Writer) *HttpConn {
+	return &HttpConn{
 		Conn:                conn,
 		oneTimeReader:       reader,
 		oneTimeWriter:       writer,
@@ -180,7 +182,7 @@ func NewConn(conn net.Conn, reader Reader, writer Writer, errorWriter Writer, er
 	}
 }
 
-func (c *Conn) Read(b []byte) (int, error) {
+func (c *HttpConn) Read(b []byte) (int, error) {
 	if c.oneTimeReader != nil {
 		buffer, err := c.oneTimeReader.Read(c.Conn)
 		if err != nil {
@@ -204,7 +206,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 }
 
 // Write implements io.Writer.
-func (c *Conn) Write(b []byte) (int, error) {
+func (c *HttpConn) Write(b []byte) (int, error) {
 	if c.oneTimeWriter != nil {
 		err := c.oneTimeWriter.Write(c.Conn)
 		c.oneTimeWriter = nil
@@ -217,18 +219,18 @@ func (c *Conn) Write(b []byte) (int, error) {
 }
 
 // Close implements net.Conn.Close().
-func (c *Conn) Close() error {
+func (c *HttpConn) Close() error {
 	if c.oneTimeWriter != nil && c.errorWriter != nil {
 		// Connection is being closed but header wasn't sent. This means the client request
 		// is probably not valid. Sending back a server error header in this case.
 
-		// Write response based on error reason
-		switch c.errReason {
-		case ErrHeaderMisMatch:
+		//Write response based on error reason
+
+		if c.errReason == ErrHeaderMisMatch {
 			c.errorMismatchWriter.Write(c.Conn)
-		case ErrHeaderToLong:
+		} else if c.errReason == ErrHeaderToLong {
 			c.errorTooLongWriter.Write(c.Conn)
-		default:
+		} else {
 			c.errorWriter.Write(c.Conn)
 		}
 	}
@@ -257,14 +259,14 @@ func formResponseHeader(config *ResponseConfig) *HeaderWriter {
 	}
 }
 
-type Authenticator struct {
+type HttpAuthenticator struct {
 	config *Config
 }
 
-func (a Authenticator) GetClientWriter() *HeaderWriter {
+func (a HttpAuthenticator) GetClientWriter() *HeaderWriter {
 	header := buf.New()
 	config := a.config.Request
-	common.Must2(header.WriteString(strings.Join([]string{config.GetMethodValue(), config.PickURI(), config.GetFullVersion()}, " ")))
+	common.Must2(header.WriteString(strings.Join([]string{config.GetMethodValue(), config.PickUri(), config.GetFullVersion()}, " ")))
 	common.Must2(header.WriteString(CRLF))
 
 	headers := config.PickHeaders()
@@ -278,11 +280,11 @@ func (a Authenticator) GetClientWriter() *HeaderWriter {
 	}
 }
 
-func (a Authenticator) GetServerWriter() *HeaderWriter {
+func (a HttpAuthenticator) GetServerWriter() *HeaderWriter {
 	return formResponseHeader(a.config.Response)
 }
 
-func (a Authenticator) Client(conn net.Conn) net.Conn {
+func (a HttpAuthenticator) Client(conn net.Conn) net.Conn {
 	if a.config.Request == nil && a.config.Response == nil {
 		return conn
 	}
@@ -295,27 +297,27 @@ func (a Authenticator) Client(conn net.Conn) net.Conn {
 	if a.config.Response != nil {
 		writer = a.GetClientWriter()
 	}
-	return NewConn(conn, reader, writer, NoOpWriter{}, NoOpWriter{}, NoOpWriter{})
+	return NewHttpConn(conn, reader, writer, NoOpWriter{}, NoOpWriter{}, NoOpWriter{})
 }
 
-func (a Authenticator) Server(conn net.Conn) net.Conn {
+func (a HttpAuthenticator) Server(conn net.Conn) net.Conn {
 	if a.config.Request == nil && a.config.Response == nil {
 		return conn
 	}
-	return NewConn(conn, new(HeaderReader).ExpectThisRequest(a.config.Request), a.GetServerWriter(),
+	return NewHttpConn(conn, new(HeaderReader).ExpectThisRequest(a.config.Request), a.GetServerWriter(),
 		formResponseHeader(resp400),
 		formResponseHeader(resp404),
 		formResponseHeader(resp400))
 }
 
-func NewAuthenticator(ctx context.Context, config *Config) (Authenticator, error) {
-	return Authenticator{
+func NewHttpAuthenticator(ctx context.Context, config *Config) (HttpAuthenticator, error) {
+	return HttpAuthenticator{
 		config: config,
 	}, nil
 }
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
-		return NewAuthenticator(ctx, config.(*Config))
+		return NewHttpAuthenticator(ctx, config.(*Config))
 	}))
 }

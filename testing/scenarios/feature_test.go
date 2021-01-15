@@ -638,7 +638,6 @@ func TestDomainSniffing(t *testing.T) {
 
 		resp, err := client.Get("https://www.github.com/")
 		common.Must(err)
-		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
 			t.Error("unexpected status code: ", resp.StatusCode)
 		}

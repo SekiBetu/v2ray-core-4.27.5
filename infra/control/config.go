@@ -66,15 +66,13 @@ func (c *ConfigCommand) Execute(args []string) error {
 
 // LoadArg loads one arg, maybe an remote url, or local file path
 func (c *ConfigCommand) LoadArg(arg string) (out io.Reader, err error) {
+
 	var data []byte
-	switch {
-	case strings.HasPrefix(arg, "http://"), strings.HasPrefix(arg, "https://"):
+	if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 		data, err = FetchHTTPContent(arg)
-
-	case arg == "stdin:":
+	} else if arg == "stdin:" {
 		data, err = ioutil.ReadAll(os.Stdin)
-
-	default:
+	} else {
 		data, err = ioutil.ReadFile(arg)
 	}
 

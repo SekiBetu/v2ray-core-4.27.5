@@ -6,8 +6,6 @@ func (n Network) SystemString() string {
 		return "tcp"
 	case Network_UDP:
 		return "udp"
-	case Network_UNIX:
-		return "unix"
 	default:
 		return "unknown"
 	}

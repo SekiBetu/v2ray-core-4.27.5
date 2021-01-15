@@ -2,31 +2,31 @@ package conf_test
 
 import (
 	"encoding/json"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"os"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"v2ray.com/core/common/protocol"
 
 	"v2ray.com/core/common"
 	"v2ray.com/core/common/net"
-	"v2ray.com/core/common/protocol"
 	. "v2ray.com/core/infra/conf"
 )
 
 func TestStringListUnmarshalError(t *testing.T) {
-	rawJSON := `1234`
+	rawJson := `1234`
 	list := new(StringList)
-	err := json.Unmarshal([]byte(rawJSON), list)
+	err := json.Unmarshal([]byte(rawJson), list)
 	if err == nil {
 		t.Error("expected error, but got nil")
 	}
 }
 
 func TestStringListLen(t *testing.T) {
-	rawJSON := `"a, b, c, d"`
+	rawJson := `"a, b, c, d"`
 	var list StringList
-	err := json.Unmarshal([]byte(rawJSON), &list)
+	err := json.Unmarshal([]byte(rawJson), &list)
 	common.Must(err)
 	if r := cmp.Diff([]string(list), []string{"a", " b", " c", " d"}); r != "" {
 		t.Error(r)
@@ -34,9 +34,9 @@ func TestStringListLen(t *testing.T) {
 }
 
 func TestIPParsing(t *testing.T) {
-	rawJSON := "\"8.8.8.8\""
+	rawJson := "\"8.8.8.8\""
 	var address Address
-	err := json.Unmarshal([]byte(rawJSON), &address)
+	err := json.Unmarshal([]byte(rawJson), &address)
 	common.Must(err)
 	if r := cmp.Diff(address.IP(), net.IP{8, 8, 8, 8}); r != "" {
 		t.Error(r)
@@ -44,9 +44,9 @@ func TestIPParsing(t *testing.T) {
 }
 
 func TestDomainParsing(t *testing.T) {
-	rawJSON := "\"v2ray.com\""
+	rawJson := "\"v2ray.com\""
 	var address Address
-	common.Must(json.Unmarshal([]byte(rawJSON), &address))
+	common.Must(json.Unmarshal([]byte(rawJson), &address))
 	if address.Domain() != "v2ray.com" {
 		t.Error("domain: ", address.Domain())
 	}
@@ -54,17 +54,17 @@ func TestDomainParsing(t *testing.T) {
 
 func TestURLParsing(t *testing.T) {
 	{
-		rawJSON := "\"https://dns.google/dns-query\""
+		rawJson := "\"https://dns.google/dns-query\""
 		var address Address
-		common.Must(json.Unmarshal([]byte(rawJSON), &address))
+		common.Must(json.Unmarshal([]byte(rawJson), &address))
 		if address.Domain() != "https://dns.google/dns-query" {
 			t.Error("URL: ", address.Domain())
 		}
 	}
 	{
-		rawJSON := "\"https+local://dns.google/dns-query\""
+		rawJson := "\"https+local://dns.google/dns-query\""
 		var address Address
-		common.Must(json.Unmarshal([]byte(rawJSON), &address))
+		common.Must(json.Unmarshal([]byte(rawJson), &address))
 		if address.Domain() != "https+local://dns.google/dns-query" {
 			t.Error("URL: ", address.Domain())
 		}
@@ -72,9 +72,9 @@ func TestURLParsing(t *testing.T) {
 }
 
 func TestInvalidAddressJson(t *testing.T) {
-	rawJSON := "1234"
+	rawJson := "1234"
 	var address Address
-	err := json.Unmarshal([]byte(rawJSON), &address)
+	err := json.Unmarshal([]byte(rawJson), &address)
 	if err == nil {
 		t.Error("nil error")
 	}

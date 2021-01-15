@@ -6,4 +6,5 @@ option go_package = "v2ray.com/core/transport/internet/headers/tls";
 option java_package = "com.v2ray.core.transport.internet.headers.tls";
 option java_multiple_files = true;
 
-message PacketConfig {}
+message PacketConfig {
+}

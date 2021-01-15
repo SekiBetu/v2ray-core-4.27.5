@@ -2,11 +2,10 @@ package aead
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"strconv"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateAuthID(t *testing.T) {
@@ -58,6 +57,7 @@ func TestCreateAuthIDAndDecode2(t *testing.T) {
 	res2, err2 := AuthDecoder.Match(authid2)
 	assert.EqualError(t, err2, "user do not exist")
 	assert.Nil(t, res2)
+
 }
 
 func TestCreateAuthIDAndDecodeMassive(t *testing.T) {
@@ -89,6 +89,7 @@ func TestCreateAuthIDAndDecodeMassive(t *testing.T) {
 	res2, err2 := AuthDecoder.Match(authid3)
 	assert.Equal(t, "Demo User", res2)
 	assert.Nil(t, err2)
+
 }
 
 func TestCreateAuthIDAndDecodeSuperMassive(t *testing.T) {
@@ -124,4 +125,5 @@ func TestCreateAuthIDAndDecodeSuperMassive(t *testing.T) {
 	assert.Nil(t, err2)
 
 	fmt.Println(after.Sub(before).Seconds())
+
 }

@@ -1,7 +1,6 @@
 package task_test
 
 import (
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,33 +9,28 @@ import (
 )
 
 func TestPeriodicTaskStop(t *testing.T) {
-	var value uint64
+	value := 0
 	task := &Periodic{
 		Interval: time.Second * 2,
 		Execute: func() error {
-			atomic.AddUint64(&value, 1)
+			value++
 			return nil
 		},
 	}
 	common.Must(task.Start())
 	time.Sleep(time.Second * 5)
 	common.Must(task.Close())
-	value1 := atomic.LoadUint64(&value)
-	if value1 != 3 {
-		t.Fatal("expected 3, but got ", value1)
+	if value != 3 {
+		t.Fatal("expected 3, but got ", value)
 	}
-
 	time.Sleep(time.Second * 4)
-	value2 := atomic.LoadUint64(&value)
-	if value2 != 3 {
-		t.Fatal("expected 3, but got ", value2)
+	if value != 3 {
+		t.Fatal("expected 3, but got ", value)
 	}
-
 	common.Must(task.Start())
 	time.Sleep(time.Second * 3)
-	value3 := atomic.LoadUint64(&value)
-	if value3 != 5 {
-		t.Fatal("Expected 5, but ", value3)
+	if value != 5 {
+		t.Fatal("Expected 5, but ", value)
 	}
 	common.Must(task.Close())
 }

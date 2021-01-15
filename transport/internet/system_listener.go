@@ -2,10 +2,8 @@ package internet
 
 import (
 	"context"
-	"runtime"
 	"syscall"
 
-	"github.com/pires/go-proxyproto"
 	"v2ray.com/core/common/net"
 	"v2ray.com/core/common/session"
 )
@@ -29,7 +27,7 @@ func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []co
 				}
 			}
 
-			setReusePort(fd) // nolint: staticcheck
+			setReusePort(fd)
 
 			for _, controller := range controllers {
 				if err := controller(network, address, fd); err != nil {
@@ -42,45 +40,10 @@ func getControlFunc(ctx context.Context, sockopt *SocketConfig, controllers []co
 
 func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (net.Listener, error) {
 	var lc net.ListenConfig
-	var l net.Listener
-	var err error
-	var network, address string
-	switch addr := addr.(type) {
-	case *net.TCPAddr:
-		network = addr.Network()
-		address = addr.String()
-		lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
-	case *net.UnixAddr:
-		lc.Control = nil
-		network = addr.Network()
-		address = addr.Name
-		if (runtime.GOOS == "linux" || runtime.GOOS == "android") && address[0] == '@' {
-			// linux abstract unix domain socket is lockfree
-			if len(address) > 1 && address[1] == '@' {
-				// but may need padding to work with haproxy
-				fullAddr := make([]byte, len(syscall.RawSockaddrUnix{}.Path))
-				copy(fullAddr, address[1:])
-				address = string(fullAddr)
-			}
-		} else {
-			// normal unix domain socket needs lock
-			locker := &FileLocker{
-				path: address + ".lock",
-			}
-			err := locker.Acquire()
-			if err != nil {
-				return nil, err
-			}
-			ctx = context.WithValue(ctx, address, locker) // nolint: golint,staticcheck
-		}
-	}
 
-	l, err = lc.Listen(ctx, network, address)
-	if sockopt != nil && sockopt.AcceptProxyProtocol {
-		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
-		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
-	}
-	return l, err
+	lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
+
+	return lc.Listen(ctx, addr.Network(), addr.String())
 }
 
 func (dl *DefaultListener) ListenPacket(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (net.PacketConn, error) {

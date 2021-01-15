@@ -19,8 +19,9 @@ import (
 
 // MemoryAccount is an account type converted from Account.
 type MemoryAccount struct {
-	Cipher Cipher
-	Key    []byte
+	Cipher      Cipher
+	Key         []byte
+	OneTimeAuth Account_OneTimeAuth
 }
 
 // Equals implements protocol.Account.Equals().
@@ -39,14 +40,22 @@ func createAesGcm(key []byte) cipher.AEAD {
 	return gcm
 }
 
-func createChaCha20Poly1305(key []byte) cipher.AEAD {
-	ChaChaPoly1305, err := chacha20poly1305.New(key)
+func createChacha20Poly1305(key []byte) cipher.AEAD {
+	chacha20, err := chacha20poly1305.New(key)
 	common.Must(err)
-	return ChaChaPoly1305
+	return chacha20
 }
 
 func (a *Account) getCipher() (Cipher, error) {
 	switch a.CipherType {
+	case CipherType_AES_128_CFB:
+		return &AesCfb{KeyBytes: 16}, nil
+	case CipherType_AES_256_CFB:
+		return &AesCfb{KeyBytes: 32}, nil
+	case CipherType_CHACHA20:
+		return &ChaCha20{IVBytes: 8}, nil
+	case CipherType_CHACHA20_IETF:
+		return &ChaCha20{IVBytes: 12}, nil
 	case CipherType_AES_128_GCM:
 		return &AEADCipher{
 			KeyBytes:        16,
@@ -63,7 +72,7 @@ func (a *Account) getCipher() (Cipher, error) {
 		return &AEADCipher{
 			KeyBytes:        32,
 			IVBytes:         32,
-			AEADAuthCreator: createChaCha20Poly1305,
+			AEADAuthCreator: createChacha20Poly1305,
 		}, nil
 	case CipherType_NONE:
 		return NoneCipher{}, nil
@@ -74,13 +83,14 @@ func (a *Account) getCipher() (Cipher, error) {
 
 // AsAccount implements protocol.AsAccount.
 func (a *Account) AsAccount() (protocol.Account, error) {
-	Cipher, err := a.getCipher()
+	cipher, err := a.getCipher()
 	if err != nil {
 		return nil, newError("failed to get cipher").Base(err)
 	}
 	return &MemoryAccount{
-		Cipher: Cipher,
-		Key:    passwordToCipherKey([]byte(a.Password), Cipher.KeySize()),
+		Cipher:      cipher,
+		Key:         passwordToCipherKey([]byte(a.Password), cipher.KeySize()),
+		OneTimeAuth: a.Ota,
 	}, nil
 }
 
@@ -93,6 +103,53 @@ type Cipher interface {
 	IsAEAD() bool
 	EncodePacket(key []byte, b *buf.Buffer) error
 	DecodePacket(key []byte, b *buf.Buffer) error
+}
+
+// AesCfb represents all AES-CFB ciphers.
+type AesCfb struct {
+	KeyBytes int32
+}
+
+func (*AesCfb) IsAEAD() bool {
+	return false
+}
+
+func (v *AesCfb) KeySize() int32 {
+	return v.KeyBytes
+}
+
+func (v *AesCfb) IVSize() int32 {
+	return 16
+}
+
+func (v *AesCfb) NewEncryptionWriter(key []byte, iv []byte, writer io.Writer) (buf.Writer, error) {
+	stream := crypto.NewAesEncryptionStream(key, iv)
+	return &buf.SequentialWriter{Writer: crypto.NewCryptionWriter(stream, writer)}, nil
+}
+
+func (v *AesCfb) NewDecryptionReader(key []byte, iv []byte, reader io.Reader) (buf.Reader, error) {
+	stream := crypto.NewAesDecryptionStream(key, iv)
+	return &buf.SingleReader{
+		Reader: crypto.NewCryptionReader(stream, reader),
+	}, nil
+}
+
+func (v *AesCfb) EncodePacket(key []byte, b *buf.Buffer) error {
+	iv := b.BytesTo(v.IVSize())
+	stream := crypto.NewAesEncryptionStream(key, iv)
+	stream.XORKeyStream(b.BytesFrom(v.IVSize()), b.BytesFrom(v.IVSize()))
+	return nil
+}
+
+func (v *AesCfb) DecodePacket(key []byte, b *buf.Buffer) error {
+	if b.Len() <= v.IVSize() {
+		return newError("insufficient data: ", b.Len())
+	}
+	iv := b.BytesTo(v.IVSize())
+	stream := crypto.NewAesDecryptionStream(key, iv)
+	stream.XORKeyStream(b.BytesFrom(v.IVSize()), b.BytesFrom(v.IVSize()))
+	b.Advance(v.IVSize())
+	return nil
 }
 
 type AEADCipher struct {
@@ -163,12 +220,56 @@ func (c *AEADCipher) DecodePacket(key []byte, b *buf.Buffer) error {
 	return nil
 }
 
+type ChaCha20 struct {
+	IVBytes int32
+}
+
+func (*ChaCha20) IsAEAD() bool {
+	return false
+}
+
+func (v *ChaCha20) KeySize() int32 {
+	return 32
+}
+
+func (v *ChaCha20) IVSize() int32 {
+	return v.IVBytes
+}
+
+func (v *ChaCha20) NewEncryptionWriter(key []byte, iv []byte, writer io.Writer) (buf.Writer, error) {
+	stream := crypto.NewChaCha20Stream(key, iv)
+	return &buf.SequentialWriter{Writer: crypto.NewCryptionWriter(stream, writer)}, nil
+}
+
+func (v *ChaCha20) NewDecryptionReader(key []byte, iv []byte, reader io.Reader) (buf.Reader, error) {
+	stream := crypto.NewChaCha20Stream(key, iv)
+	return &buf.SingleReader{Reader: crypto.NewCryptionReader(stream, reader)}, nil
+}
+
+func (v *ChaCha20) EncodePacket(key []byte, b *buf.Buffer) error {
+	iv := b.BytesTo(v.IVSize())
+	stream := crypto.NewChaCha20Stream(key, iv)
+	stream.XORKeyStream(b.BytesFrom(v.IVSize()), b.BytesFrom(v.IVSize()))
+	return nil
+}
+
+func (v *ChaCha20) DecodePacket(key []byte, b *buf.Buffer) error {
+	if b.Len() <= v.IVSize() {
+		return newError("insufficient data: ", b.Len())
+	}
+	iv := b.BytesTo(v.IVSize())
+	stream := crypto.NewChaCha20Stream(key, iv)
+	stream.XORKeyStream(b.BytesFrom(v.IVSize()), b.BytesFrom(v.IVSize()))
+	b.Advance(v.IVSize())
+	return nil
+}
+
 type NoneCipher struct{}
 
 func (NoneCipher) KeySize() int32 { return 0 }
 func (NoneCipher) IVSize() int32  { return 0 }
 func (NoneCipher) IsAEAD() bool {
-	return false
+	return true // to avoid OTA
 }
 
 func (NoneCipher) NewDecryptionReader(key []byte, iv []byte, reader io.Reader) (buf.Reader, error) {
@@ -204,7 +305,7 @@ func passwordToCipherKey(password []byte, keySize int32) []byte {
 	return key
 }
 
-func hkdfSHA1(secret, salt, outKey []byte) {
+func hkdfSHA1(secret, salt, outkey []byte) {
 	r := hkdf.New(sha1.New, secret, salt, []byte("ss-subkey"))
-	common.Must2(io.ReadFull(r, outKey))
+	common.Must2(io.ReadFull(r, outkey))
 }

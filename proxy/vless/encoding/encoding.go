@@ -2,7 +2,7 @@
 
 package encoding
 
-//go:generate go run v2ray.com/core/common/errors/errorgen
+//go:generate errorgen
 
 import (
 	"io"
@@ -26,6 +26,7 @@ var addrParser = protocol.NewAddressParser(
 
 // EncodeRequestHeader writes encoded request header into the given writer.
 func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requestAddons *Addons) error {
+
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -59,52 +60,49 @@ func EncodeRequestHeader(writer io.Writer, request *protocol.RequestHeader, requ
 }
 
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
-func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validator *vless.Validator) (*protocol.RequestHeader, *Addons, bool, error) {
+func DecodeRequestHeader(reader io.Reader, validator *vless.Validator) (*protocol.RequestHeader, *Addons, error, *buf.Buffer) {
+
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
-	request := new(protocol.RequestHeader)
+	pre := buf.New()
 
-	if isfb {
-		request.Version = first.Byte(0)
-	} else {
-		if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
-			return nil, nil, false, newError("failed to read request version").Base(err)
-		}
-		request.Version = buffer.Byte(0)
+	if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
+		pre.Write(buffer.Bytes())
+		return nil, nil, newError("failed to read request version").Base(err), pre
 	}
+
+	request := &protocol.RequestHeader{
+		Version: buffer.Byte(0),
+	}
+
+	pre.Write(buffer.Bytes())
 
 	switch request.Version {
 	case 0:
 
-		var id [16]byte
-
-		if isfb {
-			copy(id[:], first.BytesRange(1, 17))
-		} else {
-			buffer.Clear()
-			if _, err := buffer.ReadFullFrom(reader, 16); err != nil {
-				return nil, nil, false, newError("failed to read request user id").Base(err)
-			}
-			copy(id[:], buffer.Bytes())
+		buffer.Clear()
+		if _, err := buffer.ReadFullFrom(reader, protocol.IDBytesLen); err != nil {
+			pre.Write(buffer.Bytes())
+			return nil, nil, newError("failed to read request user id").Base(err), pre
 		}
+
+		var id [16]byte
+		copy(id[:], buffer.Bytes())
 
 		if request.User = validator.Get(id); request.User == nil {
-			return nil, nil, isfb, newError("invalid request user id")
-		}
-
-		if isfb {
-			first.Advance(17)
+			pre.Write(buffer.Bytes())
+			return nil, nil, newError("invalid request user id"), pre
 		}
 
 		requestAddons, err := DecodeHeaderAddons(&buffer, reader)
 		if err != nil {
-			return nil, nil, false, newError("failed to decode request header addons").Base(err)
+			return nil, nil, newError("failed to decode request header addons").Base(err), nil
 		}
 
 		buffer.Clear()
 		if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
-			return nil, nil, false, newError("failed to read request command").Base(err)
+			return nil, nil, newError("failed to read request command").Base(err), nil
 		}
 
 		request.Command = protocol.RequestCommand(buffer.Byte(0))
@@ -118,17 +116,24 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 				request.Port = port
 			}
 		}
+
 		if request.Address == nil {
-			return nil, nil, false, newError("invalid request address")
+			return nil, nil, newError("invalid request address"), nil
 		}
-		return request, requestAddons, false, nil
+
+		return request, requestAddons, nil, nil
+
 	default:
-		return nil, nil, isfb, newError("invalid request version")
+
+		return nil, nil, newError("invalid request version"), pre
+
 	}
+
 }
 
 // EncodeResponseHeader writes encoded response header into the given writer.
 func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, responseAddons *Addons) error {
+
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
@@ -148,22 +153,23 @@ func EncodeResponseHeader(writer io.Writer, request *protocol.RequestHeader, res
 }
 
 // DecodeResponseHeader decodes and returns (if successful) a ResponseHeader from an input stream.
-func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*Addons, error) {
+func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader, responseAddons *Addons) error {
+
 	buffer := buf.StackNew()
 	defer buffer.Release()
 
 	if _, err := buffer.ReadFullFrom(reader, 1); err != nil {
-		return nil, newError("failed to read response version").Base(err)
+		return newError("failed to read response version").Base(err)
 	}
 
 	if buffer.Byte(0) != request.Version {
-		return nil, newError("unexpected response version. Expecting ", int(request.Version), " but actually ", int(buffer.Byte(0)))
+		return newError("unexpected response version. Expecting ", int(request.Version), " but actually ", int(buffer.Byte(0)))
 	}
 
 	responseAddons, err := DecodeHeaderAddons(&buffer, reader)
 	if err != nil {
-		return nil, newError("failed to decode response header addons").Base(err)
+		return newError("failed to decode response header addons").Base(err)
 	}
 
-	return responseAddons, nil
+	return nil
 }

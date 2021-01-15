@@ -2,7 +2,7 @@
 
 package inbound
 
-//go:generate go run v2ray.com/core/common/errors/errorgen
+//go:generate errorgen
 
 import (
 	"context"
@@ -148,7 +148,7 @@ func (h *Handler) Close() error {
 
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
-	return []net.Network{net.Network_TCP, net.Network_UNIX}
+	return []net.Network{net.Network_TCP}
 }
 
 func (h *Handler) GetUser(email string) *protocol.MemoryUser {

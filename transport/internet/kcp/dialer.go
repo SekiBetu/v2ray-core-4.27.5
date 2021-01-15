@@ -4,6 +4,7 @@ package kcp
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"sync/atomic"
 
@@ -12,14 +13,14 @@ import (
 	"v2ray.com/core/common/dice"
 	"v2ray.com/core/common/net"
 	"v2ray.com/core/transport/internet"
-	"v2ray.com/core/transport/internet/tls"
+	v2tls "v2ray.com/core/transport/internet/tls"
 )
 
 var (
 	globalConv = uint32(dice.RollUint16())
 )
 
-func fetchInput(_ context.Context, input io.Reader, reader PacketReader, conn *Connection) {
+func fetchInput(ctx context.Context, input io.Reader, reader PacketReader, conn *Connection) {
 	cache := make(chan *buf.Buffer, 1024)
 	go func() {
 		for {
@@ -87,8 +88,9 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 
 	var iConn internet.Connection = session
 
-	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		iConn = tls.Client(iConn, config.GetTLSConfig(tls.WithDestination(dest)))
+	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
+		tlsConn := tls.Client(iConn, config.GetTLSConfig(v2tls.WithDestination(dest)))
+		iConn = tlsConn
 	}
 
 	return iConn, nil

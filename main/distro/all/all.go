@@ -31,7 +31,6 @@ import (
 	_ "v2ray.com/core/proxy/mtproto"
 	_ "v2ray.com/core/proxy/shadowsocks"
 	_ "v2ray.com/core/proxy/socks"
-	_ "v2ray.com/core/proxy/trojan"
 	_ "v2ray.com/core/proxy/vless/inbound"
 	_ "v2ray.com/core/proxy/vless/outbound"
 	_ "v2ray.com/core/proxy/vmess/inbound"
@@ -58,9 +57,9 @@ import (
 
 	// JSON config support. Choose only one from the two below.
 	// The following line loads JSON from v2ctl
-	// _ "v2ray.com/core/main/json"
+	_ "v2ray.com/core/main/json"
 	// The following line loads JSON internally
-	_ "v2ray.com/core/main/jsonem"
+	// _ "v2ray.com/core/main/jsonem"
 
 	// Load config from file or http(s)
 	_ "v2ray.com/core/main/confloader/external"

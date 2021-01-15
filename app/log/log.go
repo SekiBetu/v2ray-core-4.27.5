@@ -2,7 +2,7 @@
 
 package log
 
-//go:generate go run v2ray.com/core/common/errors/errorgen
+//go:generate errorgen
 
 import (
 	"context"
@@ -127,10 +127,10 @@ func (g *Instance) Close() error {
 
 	g.active = false
 
-	common.Close(g.accessLogger)
+	common.Close(g.accessLogger) // nolint: errcheck
 	g.accessLogger = nil
 
-	common.Close(g.errorLogger)
+	common.Close(g.errorLogger) // nolint: errcheck
 	g.errorLogger = nil
 
 	return nil

@@ -161,7 +161,7 @@ func RequireFeatures(ctx context.Context, callback interface{}) error {
 func New(config *Config) (*Instance, error) {
 	var server = &Instance{ctx: context.Background()}
 
-	done, err := initInstanceWithConfig(config, server)
+	err, done := initInstanceWithConfig(config, server)
 	if done {
 		return nil, err
 	}
@@ -169,10 +169,10 @@ func New(config *Config) (*Instance, error) {
 	return server, nil
 }
 
-func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
+func NewWithContext(config *Config, ctx context.Context) (*Instance, error) {
 	var server = &Instance{ctx: ctx}
 
-	done, err := initInstanceWithConfig(config, server)
+	err, done := initInstanceWithConfig(config, server)
 	if done {
 		return nil, err
 	}
@@ -180,26 +180,26 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 	return server, nil
 }
 
-func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
+func initInstanceWithConfig(config *Config, server *Instance) (error, bool) {
 	if config.Transport != nil {
 		features.PrintDeprecatedFeatureWarning("global transport settings")
 	}
 	if err := config.Transport.Apply(); err != nil {
-		return true, err
+		return err, true
 	}
 
 	for _, appSettings := range config.App {
 		settings, err := appSettings.GetInstance()
 		if err != nil {
-			return true, err
+			return err, true
 		}
 		obj, err := CreateObject(server, settings)
 		if err != nil {
-			return true, err
+			return err, true
 		}
 		if feature, ok := obj.(features.Feature); ok {
 			if err := server.AddFeature(feature); err != nil {
-				return true, err
+				return err, true
 			}
 		}
 	}
@@ -217,23 +217,23 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 	for _, f := range essentialFeatures {
 		if server.GetFeature(f.Type) == nil {
 			if err := server.AddFeature(f.Instance); err != nil {
-				return true, err
+				return err, true
 			}
 		}
 	}
 
 	if server.featureResolutions != nil {
-		return true, newError("not all dependency are resolved.")
+		return newError("not all dependency are resolved."), true
 	}
 
 	if err := addInboundHandlers(server, config.Inbound); err != nil {
-		return true, err
+		return err, true
 	}
 
 	if err := addOutboundHandlers(server, config.Outbound); err != nil {
-		return true, err
+		return err, true
 	}
-	return false, nil
+	return nil, false
 }
 
 // Type implements common.HasType.

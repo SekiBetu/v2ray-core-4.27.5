@@ -2,9 +2,7 @@ package conf
 
 import (
 	"encoding/json"
-	"runtime"
 	"strconv"
-	"syscall"
 
 	"github.com/golang/protobuf/proto"
 
@@ -33,7 +31,12 @@ type VLessInboundConfig struct {
 
 // Build implements Buildable
 func (c *VLessInboundConfig) Build() (proto.Message, error) {
+
 	config := new(inbound.Config)
+
+	if len(c.Clients) == 0 {
+		return nil, newError(`VLESS settings: "clients" is empty`)
+	}
 	config.Clients = make([]*protocol.User, len(c.Clients))
 	for idx, rawUser := range c.Clients {
 		user := new(protocol.User)
@@ -45,6 +48,9 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			return nil, newError(`VLESS clients: invalid user`).Base(err)
 		}
 
+		if account.Schedulers != "" {
+			return nil, newError(`VLESS clients: "schedulers" is not available in this version`)
+		}
 		if account.Encryption != "" {
 			return nil, newError(`VLESS clients: "encryption" should not in inbound settings`)
 		}
@@ -93,11 +99,6 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 				switch fb.Dest[0] {
 				case '@', '/':
 					fb.Type = "unix"
-					if fb.Dest[0] == '@' && len(fb.Dest) > 1 && fb.Dest[1] == '@' && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
-						fullAddr := make([]byte, len(syscall.RawSockaddrUnix{}.Path)) // may need padding to work with haproxy
-						copy(fullAddr, fb.Dest[1:])
-						fb.Dest = string(fullAddr)
-					}
 				default:
 					if _, err := strconv.Atoi(fb.Dest); err == nil {
 						fb.Dest = "127.0.0.1:" + fb.Dest
@@ -131,6 +132,7 @@ type VLessOutboundConfig struct {
 
 // Build implements Buildable
 func (c *VLessOutboundConfig) Build() (proto.Message, error) {
+
 	config := new(outbound.Config)
 
 	if len(c.Vnext) == 0 {
@@ -159,6 +161,9 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				return nil, newError(`VLESS users: invalid user`).Base(err)
 			}
 
+			if account.Schedulers != "" {
+				return nil, newError(`VLESS users: "schedulers" is not available in this version`)
+			}
 			if account.Encryption != "none" {
 				return nil, newError(`VLESS users: please add/set "encryption":"none" for every user`)
 			}

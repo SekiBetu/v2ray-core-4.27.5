@@ -31,7 +31,7 @@ import (
 	tcptransport "v2ray.com/core/transport/internet/tcp"
 )
 
-func TestHTTPConnectionHeader(t *testing.T) {
+func TestHttpConnectionHeader(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -136,8 +136,8 @@ func TestHTTPConnectionHeader(t *testing.T) {
 }
 
 func TestDomainSocket(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "android" {
-		t.Skip("Not supported on windows and android")
+	if runtime.GOOS == "windows" {
+		t.Skip("Not supported on windows")
 		return
 	}
 	tcpServer := tcp.Server{

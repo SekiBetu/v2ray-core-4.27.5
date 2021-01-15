@@ -2,7 +2,7 @@
 
 package dispatcher
 
-//go:generate go run v2ray.com/core/common/errors/errorgen
+//go:generate errorgen
 
 import (
 	"context"
@@ -260,9 +260,13 @@ func sniffer(ctx context.Context, cReader *cachedReader) (SniffResult, error) {
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
 	var handler outbound.Handler
 
-	if d.router != nil {
-		if route, err := d.router.PickRoute(routing_session.AsRoutingContext(ctx)); err == nil {
-			tag := route.GetOutboundTag()
+	skipRoutePick := false
+	if content := session.ContentFromContext(ctx); content != nil {
+		skipRoutePick = content.SkipRoutePick
+	}
+
+	if d.router != nil && !skipRoutePick {
+		if tag, err := d.router.PickRoute(routing_session.AsRoutingContext(ctx)); err == nil {
 			if h := d.ohm.GetHandler(tag); h != nil {
 				newError("taking detour [", tag, "] for [", destination, "]").WriteToLog(session.ExportIDToError(ctx))
 				handler = h

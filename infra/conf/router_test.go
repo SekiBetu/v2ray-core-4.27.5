@@ -39,14 +39,6 @@ func TestRouterConfig(t *testing.T) {
 						},
 						{
 							"type": "field",
-							"domains": [
-								"v2fly.org",
-								"github.com"
-							],
-							"outboundTag": "direct"
-						},
-						{
-							"type": "field",
 							"ip": [
 								"10.0.0.0/8",
 								"::1/128"
@@ -89,21 +81,6 @@ func TestRouterConfig(t *testing.T) {
 							{
 								Type:  router.Domain_Plain,
 								Value: "qq.com",
-							},
-						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
-						},
-					},
-					{
-						Domain: []*router.Domain{
-							{
-								Type:  router.Domain_Plain,
-								Value: "v2fly.org",
-							},
-							{
-								Type:  router.Domain_Plain,
-								Value: "github.com",
 							},
 						},
 						TargetTag: &router.RoutingRule_Tag{
@@ -170,14 +147,6 @@ func TestRouterConfig(t *testing.T) {
 						},
 						{
 							"type": "field",
-							"domains": [
-								"v2fly.org",
-								"github.com"
-							],
-							"outboundTag": "direct"
-						},
-						{
-							"type": "field",
 							"ip": [
 								"10.0.0.0/8",
 								"::1/128"
@@ -200,21 +169,6 @@ func TestRouterConfig(t *testing.T) {
 							{
 								Type:  router.Domain_Plain,
 								Value: "qq.com",
-							},
-						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
-						},
-					},
-					{
-						Domain: []*router.Domain{
-							{
-								Type:  router.Domain_Plain,
-								Value: "v2fly.org",
-							},
-							{
-								Type:  router.Domain_Plain,
-								Value: "github.com",
 							},
 						},
 						TargetTag: &router.RoutingRule_Tag{
@@ -257,14 +211,6 @@ func TestRouterConfig(t *testing.T) {
 					},
 					{
 						"type": "field",
-						"domains": [
-							"v2fly.org",
-							"github.com"
-						],
-						"outboundTag": "direct"
-					},
-					{
-						"type": "field",
 						"ip": [
 							"10.0.0.0/8",
 							"::1/128"
@@ -286,21 +232,6 @@ func TestRouterConfig(t *testing.T) {
 							{
 								Type:  router.Domain_Plain,
 								Value: "qq.com",
-							},
-						},
-						TargetTag: &router.RoutingRule_Tag{
-							Tag: "direct",
-						},
-					},
-					{
-						Domain: []*router.Domain{
-							{
-								Type:  router.Domain_Plain,
-								Value: "v2fly.org",
-							},
-							{
-								Type:  router.Domain_Plain,
-								Value: "github.com",
 							},
 						},
 						TargetTag: &router.RoutingRule_Tag{

@@ -23,11 +23,11 @@ func TestReadvReader(t *testing.T) {
 	}
 	dest, err := tcpServer.Start()
 	common.Must(err)
-	defer tcpServer.Close()
+	defer tcpServer.Close() // nolint: errcheck
 
 	conn, err := net.Dial("tcp", dest.NetAddr())
 	common.Must(err)
-	defer conn.Close()
+	defer conn.Close() // nolint: errcheck
 
 	const size = 8192
 	data := make([]byte, 8192)

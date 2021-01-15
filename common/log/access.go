@@ -36,23 +36,19 @@ func (m *AccessMessage) String() string {
 	builder.WriteString(string(m.Status))
 	builder.WriteByte(' ')
 	builder.WriteString(serial.ToString(m.To))
-
+	builder.WriteByte(' ')
 	if len(m.Detour) > 0 {
-		builder.WriteString(" [")
+		builder.WriteByte('[')
 		builder.WriteString(m.Detour)
-		builder.WriteByte(']')
+		builder.WriteString("] ")
 	}
-
-	if reason := serial.ToString(m.Reason); len(reason) > 0 {
-		builder.WriteString(" ")
-		builder.WriteString(reason)
-	}
+	builder.WriteString(serial.ToString(m.Reason))
 
 	if len(m.Email) > 0 {
-		builder.WriteString(" email: ")
+		builder.WriteString("email:")
 		builder.WriteString(m.Email)
+		builder.WriteByte(' ')
 	}
-
 	return builder.String()
 }
 

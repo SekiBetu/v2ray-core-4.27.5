@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 RELEASE_DATA=$(curl --data "version=${SIGN_VERSION}" --data "password=${SIGN_SERVICE_PASSWORD}" -X POST "${SIGN_SERIVCE_URL}" )
 echo $RELEASE_DATA

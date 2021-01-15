@@ -15,7 +15,7 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 	}
 	return &MemoryAccount{
 		ID:         protocol.NewID(id),
-		Flow:       a.Flow,       // needs parser here?
+		Schedulers: a.Schedulers, // needs parser here?
 		Encryption: a.Encryption, // needs parser here?
 	}, nil
 }
@@ -24,8 +24,8 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 type MemoryAccount struct {
 	// ID of the account.
 	ID *protocol.ID
-	// Flow of the account.
-	Flow string
+	// Schedulers of the account.
+	Schedulers string
 	// Encryption of the account. Used for client connections, and only accepts "none" for now.
 	Encryption string
 }

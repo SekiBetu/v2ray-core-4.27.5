@@ -6,7 +6,6 @@ on:
 
 jobs:
   update:
-    if: github.repository == 'v2fly/v2ray-core'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout codebase

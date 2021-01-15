@@ -2,10 +2,11 @@
 
 package inbound
 
-//go:generate go run v2ray.com/core/common/errors/errorgen
+//go:generate errorgen
 
 import (
 	"context"
+	"encoding/hex"
 	"io"
 	"strconv"
 	"time"
@@ -51,11 +52,12 @@ type Handler struct {
 	validator             *vless.Validator
 	dns                   dns.Client
 	fallbacks             map[string]map[string]*Fallback // or nil
-	// regexps               map[string]*regexp.Regexp       // or nil
+	//regexps               map[string]*regexp.Regexp       // or nil
 }
 
 // New creates a new VLess inbound handler.
 func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
+
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
 		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
@@ -76,7 +78,7 @@ func New(ctx context.Context, config *Config, dc dns.Client) (*Handler, error) {
 
 	if config.Fallbacks != nil {
 		handler.fallbacks = make(map[string]map[string]*Fallback)
-		// handler.regexps = make(map[string]*regexp.Regexp)
+		//handler.regexps = make(map[string]*regexp.Regexp)
 		for _, fb := range config.Fallbacks {
 			if handler.fallbacks[fb.Alpn] == nil {
 				handler.fallbacks[fb.Alpn] = make(map[string]*Fallback)
@@ -125,18 +127,13 @@ func (h *Handler) RemoveUser(ctx context.Context, e string) error {
 
 // Network implements proxy.Inbound.Network().
 func (*Handler) Network() []net.Network {
-	return []net.Network{net.Network_TCP, net.Network_UNIX}
+	return []net.Network{net.Network_TCP}
 }
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection internet.Connection, dispatcher routing.Dispatcher) error {
-	sid := session.ExportIDToError(ctx)
 
-	iConn := connection
-	statConn, ok := iConn.(*internet.StatCouterConnection)
-	if ok {
-		iConn = statConn.Connection
-	}
+	sid := session.ExportIDToError(ctx)
 
 	sessionPolicy := h.policyManager.ForLevel(0)
 	if err := connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
@@ -144,9 +141,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 	}
 
 	first := buf.New()
-	defer first.Release()
+	first.ReadFrom(connection)
 
-	firstLen, _ := first.ReadFrom(connection)
+	firstLen := first.Len()
 	newError("firstLen = ", firstLen).AtInfo().WriteToLog(sid)
 
 	reader := &buf.BufferedReader{
@@ -157,17 +154,25 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 	var request *protocol.RequestHeader
 	var requestAddons *encoding.Addons
 	var err error
+	var pre *buf.Buffer
 
+	isfb := false
 	apfb := h.fallbacks
-	isfb := apfb != nil
+	if apfb != nil {
+		isfb = true
+	}
 
 	if isfb && firstLen < 18 {
 		err = newError("fallback directly")
 	} else {
-		request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
+		request, requestAddons, err, pre = encoding.DecodeRequestHeader(reader, h.validator)
+		if pre == nil {
+			isfb = false
+		}
 	}
 
 	if err != nil {
+
 		if isfb {
 			if err := connection.SetReadDeadline(time.Time{}); err != nil {
 				newError("unable to set back read deadline").Base(err).AtWarning().WriteToLog(sid)
@@ -176,12 +181,16 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 
 			alpn := ""
 			if len(apfb) > 1 || apfb[""] == nil {
+				iConn := connection
+				if statConn, ok := iConn.(*internet.StatCouterConnection); ok {
+					iConn = statConn.Connection
+				}
 				if tlsConn, ok := iConn.(*tls.Conn); ok {
 					alpn = tlsConn.ConnectionState().NegotiatedProtocol
 					newError("realAlpn = " + alpn).AtInfo().WriteToLog(sid)
-				}
-				if apfb[alpn] == nil {
-					alpn = ""
+					if apfb[alpn] == nil {
+						alpn = ""
+					}
 				}
 			}
 			pfb := apfb[alpn]
@@ -206,13 +215,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 						}
 					}
 				*/
-				if firstLen >= 18 && first.Byte(4) != '*' { // not h2c
+				if pre != nil && pre.Len() == 1 && first.Byte(3) != '*' { // firstLen >= 18 && invalid request version && not h2c
 					firstBytes := first.Bytes()
-					for i := 4; i <= 8; i++ { // 5 -> 9
+					for i := 3; i <= 7; i++ { // 5 -> 9
 						if firstBytes[i] == '/' && firstBytes[i-1] == ' ' {
 							search := len(firstBytes)
 							if search > 64 {
-								search = 64 // up to about 60
+								search = 64 // up to 60
 							}
 							for j := i + 1; j < search; j++ {
 								k := firstBytes[j]
@@ -253,7 +262,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 			}); err != nil {
 				return newError("failed to dial to " + fb.Dest).Base(err).AtWarning()
 			}
-			defer conn.Close()
+			defer conn.Close() // nolint: errcheck
 
 			serverReader := buf.NewReader(conn)
 			serverWriter := buf.NewWriter(conn)
@@ -277,7 +286,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 						}
 					}
 					pro := buf.New()
-					defer pro.Release()
 					switch fb.Xver {
 					case 1:
 						if ipv4 {
@@ -285,7 +293,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 						} else {
 							pro.Write([]byte("PROXY TCP6 " + remoteAddr + " " + localAddr + " " + remotePort + " " + localPort + "\r\n"))
 						}
-
 					case 2:
 						pro.Write([]byte("\x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A\x21")) // signature + v2 + PROXY
 						if ipv4 {
@@ -297,12 +304,26 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 							pro.Write(net.ParseIP(remoteAddr).To16())
 							pro.Write(net.ParseIP(localAddr).To16())
 						}
-						p1, _ := strconv.ParseUint(remotePort, 10, 16)
-						p2, _ := strconv.ParseUint(localPort, 10, 16)
-						pro.Write([]byte{byte(p1 >> 8), byte(p1), byte(p2 >> 8), byte(p2)})
+						p1, _ := strconv.ParseInt(remotePort, 10, 64)
+						b1, _ := hex.DecodeString(strconv.FormatInt(p1, 16))
+						p2, _ := strconv.ParseInt(localPort, 10, 64)
+						b2, _ := hex.DecodeString(strconv.FormatInt(p2, 16))
+						if len(b1) == 1 {
+							pro.WriteByte(0)
+						}
+						pro.Write(b1)
+						if len(b2) == 1 {
+							pro.WriteByte(0)
+						}
+						pro.Write(b2)
 					}
 					if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{pro}); err != nil {
 						return newError("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
+					}
+				}
+				if pre != nil && pre.Len() > 0 {
+					if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{pre}); err != nil {
+						return newError("failed to fallback request pre").Base(err).AtWarning()
 					}
 				}
 				if err := buf.Copy(reader, serverWriter, buf.UpdateActivity(timer)); err != nil {
@@ -336,7 +357,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 				Status: log.AccessRejected,
 				Reason: err,
 			})
-			err = newError("invalid request from ", connection.RemoteAddr()).Base(err).AtInfo()
+			err = newError("invalid request from ", connection.RemoteAddr()).Base(err).AtWarning()
 		}
 		return err
 	}
@@ -351,8 +372,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 		panic("no inbound metadata")
 	}
 	inbound.User = request.User
-
-	responseAddons := &encoding.Addons{}
 
 	if request.Command != protocol.RequestCommandMux {
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -374,8 +393,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 		return newError("failed to dispatch request to ", request.Destination()).Base(err).AtWarning()
 	}
 
-	serverReader := link.Reader // .(*pipe.Reader)
-	serverWriter := link.Writer // .(*pipe.Writer)
+	serverReader := link.Reader
+	serverWriter := link.Writer
 
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -393,6 +412,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 
 	getResponse := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
+
+		responseAddons := &encoding.Addons{
+			Scheduler: requestAddons.Scheduler,
+		}
 
 		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
 		if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {
@@ -419,6 +442,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection i
 		// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBufer
 		if err := buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer)); err != nil {
 			return newError("failed to transfer response payload").Base(err).AtInfo()
+		}
+
+		// Indicates the end of response payload.
+		switch responseAddons.Scheduler {
+		default:
+
 		}
 
 		return nil

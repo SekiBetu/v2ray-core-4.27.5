@@ -14,9 +14,10 @@ import (
 )
 
 type VMessAccount struct {
-	ID       string `json:"id"`
-	AlterIds uint16 `json:"alterId"`
-	Security string `json:"security"`
+	ID           string `json:"id"`
+	AlterIds     uint16 `json:"alterId"`
+	Security     string `json:"security"`
+	TestsEnabled string `json:"testsEnabled"`
 }
 
 // Build implements Buildable
@@ -40,6 +41,7 @@ func (a *VMessAccount) Build() *vmess.Account {
 		SecuritySettings: &protocol.SecurityConfig{
 			Type: st,
 		},
+		TestsEnabled: a.TestsEnabled,
 	}
 }
 
@@ -67,6 +69,9 @@ type VMessDefaultConfig struct {
 func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 	config := new(inbound.DefaultConfig)
 	config.AlterId = uint32(c.AlterIDs)
+	if config.AlterId == 0 {
+		config.AlterId = 32
+	}
 	config.Level = uint32(c.Level)
 	return config
 }

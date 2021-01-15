@@ -53,19 +53,14 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if outbound == nil || !outbound.Target.IsValid() {
 		return newError("target not specified.")
 	}
-	// Destination of the inner request.
 	destination := outbound.Target
 
-	// Outbound server.
 	var server *protocol.ServerSpec
-	// Outbound server's destination.
-	var dest net.Destination
-	// Connection to the outbound server.
 	var conn internet.Connection
 
 	if err := retry.ExponentialBackoff(5, 100).On(func() error {
 		server = c.serverPicker.PickServer()
-		dest = server.Destination()
+		dest := server.Destination()
 		rawConn, err := dialer.Dial(ctx, dest)
 		if err != nil {
 			return err
@@ -108,11 +103,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	if err != nil {
 		return newError("failed to establish connection to server").AtWarning().Base(err)
 	}
-	if udpRequest != nil {
-		if udpRequest.Address == net.AnyIP || udpRequest.Address == net.AnyIPv6 {
-			udpRequest.Address = dest.Address
-		}
-	}
 
 	if err := conn.SetDeadline(time.Time{}); err != nil {
 		newError("failed to clear deadline after handshake").Base(err).WriteToLog(session.ExportIDToError(ctx))
@@ -137,7 +127,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		if err != nil {
 			return newError("failed to create UDP connection").Base(err)
 		}
-		defer udpConn.Close()
+		defer udpConn.Close() // nolint: errcheck
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
 			return buf.Copy(link.Reader, &buf.SequentialWriter{Writer: NewUDPWriter(request, udpConn)}, buf.UpdateActivity(timer))

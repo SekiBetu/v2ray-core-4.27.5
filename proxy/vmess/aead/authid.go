@@ -11,14 +11,8 @@ import (
 	"io"
 	"math"
 	"time"
-
 	"v2ray.com/core/common"
-	"v2ray.com/core/common/antireplay"
-)
-
-var (
-	ErrNotFound = errors.New("user do not exist")
-	ErrReplay   = errors.New("replayed request")
+	antiReplayWindow "v2ray.com/core/common/antireplay"
 )
 
 func CreateAuthID(cmdKey []byte, time int64) [16]byte {
@@ -38,7 +32,7 @@ func CreateAuthID(cmdKey []byte, time int64) [16]byte {
 }
 
 func NewCipherFromKey(cmdKey []byte) cipher.Block {
-	aesBlock, err := aes.NewCipher(KDF16(cmdKey, KDFSaltConstAuthIDEncryptionKey))
+	aesBlock, err := aes.NewCipher(KDF16(cmdKey, KDFSaltConst_AuthIDEncryptionKey))
 	if err != nil {
 		panic(err)
 	}
@@ -66,12 +60,12 @@ func (aidd *AuthIDDecoder) Decode(data [16]byte) (int64, uint32, int32, []byte) 
 }
 
 func NewAuthIDDecoderHolder() *AuthIDDecoderHolder {
-	return &AuthIDDecoderHolder{make(map[string]*AuthIDDecoderItem), antireplay.NewReplayFilter(120)}
+	return &AuthIDDecoderHolder{make(map[string]*AuthIDDecoderItem), antiReplayWindow.NewAntiReplayWindow(120)}
 }
 
 type AuthIDDecoderHolder struct {
-	decoders map[string]*AuthIDDecoderItem
-	filter   *antireplay.ReplayFilter
+	aidhi map[string]*AuthIDDecoderItem
+	apw   *antiReplayWindow.AntiReplayWindow
 }
 
 type AuthIDDecoderItem struct {
@@ -87,16 +81,17 @@ func NewAuthIDDecoderItem(key [16]byte, ticket interface{}) *AuthIDDecoderItem {
 }
 
 func (a *AuthIDDecoderHolder) AddUser(key [16]byte, ticket interface{}) {
-	a.decoders[string(key[:])] = NewAuthIDDecoderItem(key, ticket)
+	a.aidhi[string(key[:])] = NewAuthIDDecoderItem(key, ticket)
 }
 
 func (a *AuthIDDecoderHolder) RemoveUser(key [16]byte) {
-	delete(a.decoders, string(key[:]))
+	delete(a.aidhi, string(key[:]))
 }
 
-func (a *AuthIDDecoderHolder) Match(authID [16]byte) (interface{}, error) {
-	for _, v := range a.decoders {
-		t, z, _, d := v.dec.Decode(authID)
+func (a *AuthIDDecoderHolder) Match(AuthID [16]byte) (interface{}, error) {
+	for _, v := range a.aidhi {
+
+		t, z, r, d := v.dec.Decode(AuthID)
 		if z != crc32.ChecksumIEEE(d[:12]) {
 			continue
 		}
@@ -109,11 +104,18 @@ func (a *AuthIDDecoderHolder) Match(authID [16]byte) (interface{}, error) {
 			continue
 		}
 
-		if !a.filter.Check(authID[:]) {
+		if !a.apw.Check(AuthID[:]) {
 			return nil, ErrReplay
 		}
 
+		_ = r
+
 		return v.ticket, nil
+
 	}
 	return nil, ErrNotFound
 }
+
+var ErrNotFound = errors.New("user do not exist")
+
+var ErrReplay = errors.New("replayed request")

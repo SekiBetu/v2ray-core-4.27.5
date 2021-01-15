@@ -5,14 +5,14 @@ package kcp
 import (
 	"context"
 	"crypto/cipher"
-	gotls "crypto/tls"
+	"crypto/tls"
 	"sync"
 
 	"v2ray.com/core/common"
 	"v2ray.com/core/common/buf"
 	"v2ray.com/core/common/net"
 	"v2ray.com/core/transport/internet"
-	"v2ray.com/core/transport/internet/tls"
+	v2tls "v2ray.com/core/transport/internet/tls"
 	"v2ray.com/core/transport/internet/udp"
 )
 
@@ -27,7 +27,7 @@ type Listener struct {
 	sync.Mutex
 	sessions  map[ConnectionID]*Connection
 	hub       *udp.Hub
-	tlsConfig *gotls.Config
+	tlsConfig *tls.Config
 	config    *Config
 	reader    PacketReader
 	header    internet.PacketHeader
@@ -57,7 +57,7 @@ func NewListener(ctx context.Context, address net.Address, port net.Port, stream
 		addConn:  addConn,
 	}
 
-	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
+	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		l.tlsConfig = config.GetTLSConfig()
 	}
 
@@ -131,7 +131,8 @@ func (l *Listener) OnReceive(payload *buf.Buffer, src net.Destination) {
 		}, writer, l.config)
 		var netConn internet.Connection = conn
 		if l.tlsConfig != nil {
-			netConn = tls.Server(conn, l.tlsConfig)
+			tlsConn := tls.Server(conn, l.tlsConfig)
+			netConn = tlsConn
 		}
 
 		l.addConn(netConn)

@@ -22,14 +22,11 @@ const exp8357 = "experiment:8357"
 
 // ParseCertificate converts a cert.Certificate to Certificate.
 func ParseCertificate(c *cert.Certificate) *Certificate {
-	if c != nil {
-		certPEM, keyPEM := c.ToPEM()
-		return &Certificate{
-			Certificate: certPEM,
-			Key:         keyPEM,
-		}
+	certPEM, keyPEM := c.ToPEM()
+	return &Certificate{
+		Certificate: certPEM,
+		Key:         keyPEM,
 	}
-	return nil
 }
 
 func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
@@ -117,9 +114,8 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 
 			access.Lock()
 			for _, certificate := range c.Certificates {
-				cert := certificate
-				if !isCertificateExpired(&cert) {
-					newCerts = append(newCerts, cert)
+				if !isCertificateExpired(&certificate) {
+					newCerts = append(newCerts, certificate)
 				}
 			}
 
@@ -177,22 +173,15 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		newError("failed to load system root certificate").AtError().Base(err).WriteToLog()
 	}
 
-	if c == nil {
-		return &tls.Config{
-			ClientSessionCache:     globalSessionCache,
-			RootCAs:                root,
-			InsecureSkipVerify:     false,
-			NextProtos:             nil,
-			SessionTicketsDisabled: true,
-		}
-	}
-
 	config := &tls.Config{
 		ClientSessionCache:     globalSessionCache,
 		RootCAs:                root,
 		InsecureSkipVerify:     c.AllowInsecure,
 		NextProtos:             c.NextProtocol,
-		SessionTicketsDisabled: !c.EnableSessionResumption,
+		SessionTicketsDisabled: c.DisableSessionResumption,
+	}
+	if c == nil {
+		return config
 	}
 
 	for _, opt := range opts {

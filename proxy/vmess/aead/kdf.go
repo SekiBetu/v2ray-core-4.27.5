@@ -7,7 +7,9 @@ import (
 )
 
 func KDF(key []byte, path ...string) []byte {
-	hmacf := hmac.New(sha256.New, []byte(KDFSaltConstVMessAEADKDF))
+	hmacf := hmac.New(func() hash.Hash {
+		return sha256.New()
+	}, []byte(KDFSaltConst_VMessAEADKDF))
 
 	for _, v := range path {
 		hmacf = hmac.New(func() hash.Hash {

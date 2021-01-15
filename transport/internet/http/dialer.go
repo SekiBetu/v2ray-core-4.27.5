@@ -23,7 +23,7 @@ var (
 	globalDialerAccess sync.Mutex
 )
 
-func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config) *http.Client {
+func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.Config) (*http.Client, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
 
@@ -32,7 +32,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 	}
 
 	if client, found := globalDialerMap[dest]; found {
-		return client
+		return client, nil
 	}
 
 	transport := &http2.Transport{
@@ -50,7 +50,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 			}
 			address := net.ParseAddress(rawHost)
 
-			pconn, err := internet.DialSystem(ctx, net.TCPDestination(address, port), nil)
+			pconn, err := internet.DialSystem(context.Background(), net.TCPDestination(address, port), nil)
 			if err != nil {
 				return nil, err
 			}
@@ -68,6 +68,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 			if p := state.NegotiatedProtocol; p != http2.NextProtoTLS {
 				return nil, newError("http2: unexpected ALPN protocol " + p + "; want q" + http2.NextProtoTLS).AtError()
 			}
+			if !state.NegotiatedProtocolIsMutual {
+				return nil, newError("http2: could not negotiate protocol mutually").AtError()
+			}
 			return cn, nil
 		},
 		TLSClientConfig: tlsSettings.GetTLSConfig(tls.WithDestination(dest)),
@@ -78,7 +81,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, tlsSettings *tls.C
 	}
 
 	globalDialerMap[dest] = client
-	return client
+	return client, nil
 }
 
 // Dial dials a new TCP connection to the given destination.
@@ -88,7 +91,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if tlsConfig == nil {
 		return nil, newError("TLS must be enabled for http transport.").AtWarning()
 	}
-	client := getHTTPClient(ctx, dest, tlsConfig)
+	client, err := getHTTPClient(ctx, dest, tlsConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	opts := pipe.OptionsFromContext(ctx)
 	preader, pwriter := pipe.New(opts...)
@@ -110,7 +116,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	// Disable any compression method from server.
 	request.Header.Set("Accept-Encoding", "identity")
 
-	response, err := client.Do(request) // nolint: bodyclose
+	response, err := client.Do(request)
 	if err != nil {
 		return nil, newError("failed to dial to ", dest).Base(err).AtWarning()
 	}

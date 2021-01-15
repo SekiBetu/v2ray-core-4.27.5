@@ -1,6 +1,6 @@
 package external
 
-//go:generate go run v2ray.com/core/common/errors/errorgen
+//go:generate errorgen
 
 import (
 	"bytes"
@@ -18,15 +18,13 @@ import (
 )
 
 func ConfigLoader(arg string) (out io.Reader, err error) {
+
 	var data []byte
-	switch {
-	case strings.HasPrefix(arg, "http://"), strings.HasPrefix(arg, "https://"):
+	if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 		data, err = FetchHTTPContent(arg)
-
-	case arg == "stdin:":
+	} else if arg == "stdin:" {
 		data, err = ioutil.ReadAll(os.Stdin)
-
-	default:
+	} else {
 		data, err = ioutil.ReadFile(arg)
 	}
 
@@ -38,6 +36,7 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 }
 
 func FetchHTTPContent(target string) ([]byte, error) {
+
 	parsedTarget, err := url.Parse(target)
 	if err != nil {
 		return nil, newError("invalid URL: ", target).Base(err)
@@ -72,8 +71,8 @@ func FetchHTTPContent(target string) ([]byte, error) {
 	return content, nil
 }
 
-func ExtConfigLoader(files []string, reader io.Reader) (io.Reader, error) {
-	buf, err := ctlcmd.Run(append([]string{"config"}, files...), reader)
+func ExtConfigLoader(files []string) (io.Reader, error) {
+	buf, err := ctlcmd.Run(append([]string{"config"}, files...), os.Stdin)
 	if err != nil {
 		return nil, err
 	}

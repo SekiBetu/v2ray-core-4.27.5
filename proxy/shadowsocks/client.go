@@ -90,11 +90,15 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	user := server.PickUser()
-	_, ok := user.Account.(*MemoryAccount)
+	account, ok := user.Account.(*MemoryAccount)
 	if !ok {
 		return newError("user account is not valid")
 	}
 	request.User = user
+
+	if account.OneTimeAuth == Account_Auto || account.OneTimeAuth == Account_Enabled {
+		request.Option |= RequestOptionOneTimeAuth
+	}
 
 	sessionPolicy := c.policyManager.ForLevel(user.Level)
 	ctx, cancel := context.WithCancel(ctx)
@@ -136,6 +140,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
+
 		writer := &buf.SequentialWriter{Writer: &UDPWriter{
 			Writer:  conn,
 			Request: request,

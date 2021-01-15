@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"golang.org/x/net/http2"
+
 	"v2ray.com/core"
 	"v2ray.com/core/common"
 	"v2ray.com/core/common/buf"
@@ -96,12 +97,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 		netConn, err := setUpHTTPTunnel(ctx, dest, targetAddr, user, dialer, firstPayload)
 		if netConn != nil {
-			if _, ok := netConn.(*http2Conn); !ok {
-				if _, err := netConn.Write(firstPayload); err != nil {
-					netConn.Close()
-					return err
-				}
-			}
 			conn = internet.Connection(netConn)
 		}
 		return err
@@ -164,12 +159,16 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 			return nil, err
 		}
 
+		if _, err := rawConn.Write(firstPayload); err != nil {
+			rawConn.Close()
+			return nil, err
+		}
+
 		resp, err := http.ReadResponse(bufio.NewReader(rawConn), req)
 		if err != nil {
 			rawConn.Close()
 			return nil, err
 		}
-		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			rawConn.Close()
@@ -191,7 +190,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 			wg.Done()
 		}()
 
-		resp, err := h2clientConn.RoundTrip(req) // nolint: bodyclose
+		resp, err := h2clientConn.RoundTrip(req)
 		if err != nil {
 			rawConn.Close()
 			return nil, err
@@ -211,10 +210,9 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 	}
 
 	cachedH2Mutex.Lock()
-	cachedConn, cachedConnFound := cachedH2Conns[dest]
-	cachedH2Mutex.Unlock()
+	defer cachedH2Mutex.Unlock()
 
-	if cachedConnFound {
+	if cachedConn, found := cachedH2Conns[dest]; found {
 		rc, cc := cachedConn.rawConn, cachedConn.h2Conn
 		if cc.CanTakeNewRequest() {
 			proxyConn, err := connectHTTP2(rc, cc)
@@ -262,7 +260,6 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 			return nil, err
 		}
 
-		cachedH2Mutex.Lock()
 		if cachedH2Conns == nil {
 			cachedH2Conns = make(map[net.Destination]h2Conn)
 		}
@@ -271,7 +268,6 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 			rawConn: rawConn,
 			h2Conn:  h2clientConn,
 		}
-		cachedH2Mutex.Unlock()
 
 		return proxyConn, err
 	default:

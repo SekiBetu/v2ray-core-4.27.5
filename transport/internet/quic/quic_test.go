@@ -29,13 +29,7 @@ func TestQuicConnection(t *testing.T) {
 		ProtocolSettings: &quic.Config{},
 		SecurityType:     "tls",
 		SecuritySettings: &tls.Config{
-			Certificate: []*tls.Certificate{
-				tls.ParseCertificate(
-					cert.MustGenerate(nil,
-						cert.DNSNames("www.v2fly.org"),
-					),
-				),
-			},
+			Certificate: []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.DNSNames("www.v2ray.com"), cert.CommonName("www.v2ray.com")))},
 		},
 	}, func(conn internet.Connection) {
 		go func() {
@@ -65,7 +59,7 @@ func TestQuicConnection(t *testing.T) {
 		ProtocolSettings: &quic.Config{},
 		SecurityType:     "tls",
 		SecuritySettings: &tls.Config{
-			ServerName:    "www.v2fly.org",
+			ServerName:    "www.v2ray.com",
 			AllowInsecure: true,
 		},
 	})

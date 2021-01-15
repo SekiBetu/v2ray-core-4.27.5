@@ -11,7 +11,7 @@ import (
 type UTP struct {
 	header       byte
 	extension    byte
-	connectionID uint16
+	connectionId uint16
 }
 
 func (*UTP) Size() int32 {
@@ -20,7 +20,7 @@ func (*UTP) Size() int32 {
 
 // Serialize implements PacketHeader.
 func (u *UTP) Serialize(b []byte) {
-	binary.BigEndian.PutUint16(b, u.connectionID)
+	binary.BigEndian.PutUint16(b, u.connectionId)
 	b[2] = u.header
 	b[3] = u.extension
 }
@@ -30,7 +30,7 @@ func New(ctx context.Context, config interface{}) (interface{}, error) {
 	return &UTP{
 		header:       1,
 		extension:    0,
-		connectionID: dice.RollUint16(),
+		connectionId: dice.RollUint16(),
 	}, nil
 }
 

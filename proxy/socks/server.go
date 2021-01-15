@@ -91,10 +91,8 @@ func (s *Server) processTCP(ctx context.Context, conn internet.Connection, dispa
 	}
 
 	svrSession := &ServerSession{
-		config:        s.config,
-		address:       inbound.Gateway.Address,
-		port:          inbound.Gateway.Port,
-		clientAddress: inbound.Source.Address,
+		config: s.config,
+		port:   inbound.Gateway.Port,
 	}
 
 	reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
@@ -204,7 +202,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn internet.Connection,
 			newError("failed to write UDP response").AtWarning().Base(err).WriteToLog(session.ExportIDToError(ctx))
 		}
 
-		conn.Write(udpMessage.Bytes())
+		conn.Write(udpMessage.Bytes()) // nolint: errcheck
 	})
 
 	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {

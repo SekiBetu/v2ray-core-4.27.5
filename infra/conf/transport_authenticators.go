@@ -56,7 +56,7 @@ func (DTLSAuthenticator) Build() (proto.Message, error) {
 	return new(tls.PacketConfig), nil
 }
 
-type AuthenticatorRequest struct {
+type HTTPAuthenticatorRequest struct {
 	Version string                 `json:"version"`
 	Method  string                 `json:"method"`
 	Path    StringList             `json:"path"`
@@ -72,7 +72,7 @@ func sortMapKeys(m map[string]*StringList) []string {
 	return keys
 }
 
-func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
+func (v *HTTPAuthenticatorRequest) Build() (*http.RequestConfig, error) {
 	config := &http.RequestConfig{
 		Uri: []string{"/"},
 		Header: []*http.Header{
@@ -132,14 +132,14 @@ func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
 	return config, nil
 }
 
-type AuthenticatorResponse struct {
+type HTTPAuthenticatorResponse struct {
 	Version string                 `json:"version"`
 	Status  string                 `json:"status"`
 	Reason  string                 `json:"reason"`
 	Headers map[string]*StringList `json:"headers"`
 }
 
-func (v *AuthenticatorResponse) Build() (*http.ResponseConfig, error) {
+func (v *HTTPAuthenticatorResponse) Build() (*http.ResponseConfig, error) {
 	config := &http.ResponseConfig{
 		Header: []*http.Header{
 			{
@@ -200,12 +200,12 @@ func (v *AuthenticatorResponse) Build() (*http.ResponseConfig, error) {
 	return config, nil
 }
 
-type Authenticator struct {
-	Request  AuthenticatorRequest  `json:"request"`
-	Response AuthenticatorResponse `json:"response"`
+type HTTPAuthenticator struct {
+	Request  HTTPAuthenticatorRequest  `json:"request"`
+	Response HTTPAuthenticatorResponse `json:"response"`
 }
 
-func (v *Authenticator) Build() (proto.Message, error) {
+func (v *HTTPAuthenticator) Build() (proto.Message, error) {
 	config := new(http.Config)
 	requestConfig, err := v.Request.Build()
 	if err != nil {
