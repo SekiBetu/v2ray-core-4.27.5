@@ -1,13 +1,4 @@
 #!/bin/bash
-#
-# This is a Shell script for build multi-architectures v2ray binary file
-# 
-# Supported architectures: amd64, arm32v6, arm32v7, arm64v8, i386, ppc64le, s390x
-# 
-# Copyright (C) 2020 Teddysun <i@teddysun.com>
-#
-# Reference URL:
-# https://github.com/v2fly/v2ray-core.git
 
 cur_dir="$(pwd)"
 
@@ -23,23 +14,18 @@ git clone https://github.com/SekiBetu/v2ray-core.git
 cd v2ray-core || exit 2
 
 LDFLAGS="-s -w"
-ARCHS=( 386 amd64 arm arm64 ppc64le s390x )
-ARMS=( 6 7 )
 
-for ARCH in ${ARCHS[@]}; do
-    if [ "${ARCH}" = "arm" ]; then
-        for V in ${ARMS[@]}; do
-            echo "Building v2ray_linux_${ARCH}${V} and v2ctl_linux_${ARCH}${V}"
-            env CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} GOARM=${V} go build -v -ldflags "${LDFLAGS}" -o ${cur_dir}/v2ray_linux_${ARCH}${V} ./main
-            env CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} GOARM=${V} go build -v -ldflags "${LDFLAGS}" -tags confonly -o ${cur_dir}/v2ctl_linux_${ARCH}${V} ./infra/control/main
-        done
-    else
-        echo "Building v2ray_linux_${ARCH} and v2ctl_linux_${ARCH}"
-        env CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -v -ldflags "${LDFLAGS}" -o ${cur_dir}/v2ray_linux_${ARCH} ./main
-        env CGO_ENABLED=0 GOOS=linux GOARCH=${ARCH} go build -v -ldflags "${LDFLAGS}" -tags confonly -o ${cur_dir}/v2ctl_linux_${ARCH} ./infra/control/main
-    fi
-done
+echo "Building v2ray_linux_amd64 and v2ctl_linux_amd64"
+env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -ldflags "${LDFLAGS}" -o ${cur_dir}/v2ray_linux_amd64 ./main
+env CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -ldflags "${LDFLAGS}" -tags confonly -o ${cur_dir}/v2ctl_linux_amd64 ./infra/control/main
+
+echo "Building v2ray_linux_arm64 and v2ctl_linux_arm64"
+env CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -ldflags "${LDFLAGS}" -o ${cur_dir}/v2ray_linux_arm64 ./main
+env CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -v -ldflags "${LDFLAGS}" -tags confonly -o ${cur_dir}/v2ctl_linux_arm64 ./infra/control/main
+
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o $HOME/v2ray.exe -trimpath -ldflags "-s -w -buildid=" ./main
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o $HOME/wv2ray.exe -trimpath -ldflags "-s -w -H windowsgui -buildid=" ./main
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o $HOME/v2ctl.exe -trimpath -ldflags "-s -w -buildid=" -tags confonly ./infra/control/main
 
 chmod +x ${cur_dir}/v2ray_linux_* ${cur_dir}/v2ctl_linux_*
-# clean up
-cd ${cur_dir} && rm -fr v2ray-core
+cd ${cur_dir}
